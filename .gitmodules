@@ -1,0 +1,3 @@
+[submodule "Redwood/vendor/spdlog"]
+	path = Redwood/vendor/spdlog
+	url = https://github.com/gabime/spdlog
