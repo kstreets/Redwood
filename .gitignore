@@ -15,6 +15,9 @@
 *.vcxproj
 *.vcxproj.filters
 
+# Ignore external dependencies
+SDL*
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

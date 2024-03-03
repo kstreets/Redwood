@@ -4,11 +4,10 @@
 	#define	RWD_API __declspec(dllexport)
 #else
 	#define	RWD_API __declspec(dllimport)
+	#include <memory>
 #endif
 
-#include <memory>
-
-using u8 = char;
+using u8  = char;
 using i32 = int;
 using u32 = unsigned int;
 using f32 = float;

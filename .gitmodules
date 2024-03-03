@@ -1,3 +1,7 @@
 [submodule "Redwood/vendor/spdlog"]
 	path = Redwood/vendor/spdlog
 	url = https://github.com/gabime/spdlog
+[submodule "Redwood/vendor/sdl2"]
+	path = Redwood/vendor/sdl2
+	url = https://github.com/libsdl-org/SDL
+	branch = release-2.30.x
