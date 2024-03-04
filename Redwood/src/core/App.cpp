@@ -4,14 +4,33 @@
 #include "Window.h"
 #include "Events.h"
 #include "renderer/OpenGL/OpenGLRenderer.h"
+#include "renderer/Mesh.h"
+#include "renderer/Shader.h"
 #include "App.h"
 
 namespace rwd {
+
+	Mesh* triangleMesh;
+	Shader shader;
 
 	App::App() {
 		mRunning = true;
 		mWindow = Window::Create();
 		windowCloseEventHandler.Subscribe(BIND_EVENT_FN(App::OnWindowClose));
+
+		f32 verts[] {
+			-0.5, -0.5, 0.0,
+			0.5, -0.5, 0.0,
+			 0.0, 0.5, 0.0,
+		};
+
+		i32 indices[] {
+			0, 1, 2
+		};
+
+		triangleMesh = new Mesh(verts, sizeof(f32) * 9, indices, sizeof(i32) * 3, 3);
+
+		shader = Shader("../Redwood/src/Color.vert", "../Redwood/src/Color.frag");
 	}
 
 	App::~App() {
@@ -33,6 +52,7 @@ namespace rwd {
 		static OpenGLRenderer renderer;
 
 		renderer.Clear();
+		renderer.DrawMesh(*triangleMesh, shader);
 		mWindow->Update();
 	}
 
