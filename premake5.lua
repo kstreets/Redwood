@@ -33,6 +33,7 @@ project "Redwood"
 		"%{prj.name}/src",
 		"%{prj.name}/vendor/"..sdlFolder.."/include",
 		"%{prj.name}/vendor/spdlog/include",
+		"%{prj.name}/vendor/glm",
 		"%{prj.name}/vendor/glad",
 	}
 
@@ -48,7 +49,6 @@ project "Redwood"
 
 	filter "files:Redwood/vendor/glad/glad/*.c"
 		flags "NoPCH"
-
 
 	-- Platforms
 

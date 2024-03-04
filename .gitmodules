@@ -5,3 +5,6 @@
 	path = Redwood/vendor/sdl2
 	url = https://github.com/libsdl-org/SDL
 	branch = release-2.30.x
+[submodule "Redwood/vendor/glm"]
+	path = Redwood/vendor/glm
+	url = https://github.com/g-truc/glm
