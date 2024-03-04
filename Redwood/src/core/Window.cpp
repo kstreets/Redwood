@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "SDL.h"
 #include "Events.h"
+#include "renderer/OpenGL/OpenGLContext.h"
 #include "Window.h"
 
 namespace rwd {
@@ -47,6 +48,8 @@ namespace rwd {
 				}
 			}
 		}
+
+		mContext->SwapBuffers();
 	}
 
 	Window* Window::Create() {
@@ -54,6 +57,9 @@ namespace rwd {
 
 		Window* window = new Window();
 		window->mSdlWindow = SDL_CreateWindow("Redwood", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, windowFlags);
+
+		window->mContext = MakeRef<OpenGLContext>();
+		window->mContext->Init(window);
 
 		return window;
 	}

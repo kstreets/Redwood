@@ -3,6 +3,7 @@
 #include "Log.h"
 #include "Window.h"
 #include "Events.h"
+#include "renderer/OpenGL/OpenGLRenderer.h"
 #include "App.h"
 
 namespace rwd {
@@ -29,6 +30,9 @@ namespace rwd {
 	}
 
 	void App::MainUpdateLoop() {
+		static OpenGLRenderer renderer;
+
+		renderer.Clear();
 		mWindow->Update();
 	}
 

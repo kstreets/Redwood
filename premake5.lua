@@ -26,12 +26,14 @@ project "Redwood"
 	files {
 		"%{prj.name}/src/**.h",
 		"%{prj.name}/src/**.cpp",
+		"%{prj.name}/vendor/glad/glad/*.c",
 	}
 
 	includedirs {
 		"%{prj.name}/src",
 		"%{prj.name}/vendor/"..sdlFolder.."/include",
-		"%{prj.name}/vendor/spdlog/include"
+		"%{prj.name}/vendor/spdlog/include",
+		"%{prj.name}/vendor/glad",
 	}
 
 	libdirs {
@@ -41,6 +43,14 @@ project "Redwood"
 	links {
 		"SDL2.lib",
 	}
+
+	-- Exlcude files from using precompiled headers (tokens don't work in the filters)
+
+	filter "files:Redwood/vendor/glad/glad/*.c"
+		flags "NoPCH"
+
+
+	-- Platforms
 
 	filter "system:windows"
 		cppdialect "C++20"
@@ -57,6 +67,8 @@ project "Redwood"
 			("{MKDIR} ../bin/"..outputDir.."/Sandbox"),
 			("{COPY} %{cfg.buildtarget.relpath} ../bin/"..outputDir.."/Sandbox"),
 		}
+
+	-- Configurations
 
 	filter "configurations:Debug"
 		symbols "On" 
@@ -127,9 +139,12 @@ project "Sandbox"
 
 -- Download SDL2 release .zip and extract it
 
+print("Downloading SDL2...")
+
 sdlZip = "Redwood/vendor/sld2.zip"
 sdlUrl = "https://github.com/libsdl-org/SDL/releases/download/release-2.30.0/SDL2-devel-2.30.0-VC.zip"
 
 http.download(sdlUrl, sdlZip)
 zip.extract(sdlZip, "Redwood/vendor/")
 os.remove(sdlZip)
+

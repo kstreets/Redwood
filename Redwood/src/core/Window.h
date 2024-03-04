@@ -2,12 +2,14 @@
 #include "Core.h"
 
 struct SDL_Window;
+class Context;
 
 namespace rwd {
 
 	class RWD_API Window {
 	public:
 		friend class App;
+		friend class OpenGLContext;
 
 		Window() = default;
 		~Window();
@@ -17,7 +19,9 @@ namespace rwd {
 	private:
 		void Update();
 		static Window* Create();
+	private:
 		SDL_Window* mSdlWindow;
+		Ref<Context> mContext;
 	};
 
 }
