@@ -16,5 +16,4 @@ namespace rwd {
 
 	template<typename T, glm::qualifier Q>
 	using Translate = glm::translate(glm::mat<4, 4, T, Q> const& m, glm::vec<3, T, Q> const& v);
-
 }

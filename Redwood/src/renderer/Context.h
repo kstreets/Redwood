@@ -1,4 +1,5 @@
 #pragma once
+#include "SDL.h"
 
 namespace rwd {
 
@@ -6,8 +7,15 @@ namespace rwd {
 
 	class Context {
 	public:
-		virtual void Init(Window* windowHandle) = 0;
+		Context(SDL_Window* sdlWindow);
+		virtual ~Context() = default;
+
 		virtual void SwapBuffers() = 0;
+	protected:
+		SDL_Window* mSdlWindow;
 	};
+
+	inline Context::Context(SDL_Window* sdlWindow)
+		: mSdlWindow(sdlWindow) { }
 
 }

@@ -2,6 +2,7 @@
 #include "SDL.h"
 #include "Events.h"
 #include "renderer/OpenGL/OpenGLContext.h"
+#include "renderer/Vulkan/VulkanContext.h"
 #include "Window.h"
 
 namespace rwd {
@@ -53,13 +54,15 @@ namespace rwd {
 	}
 
 	Window* Window::Create() {
-		u32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
+		u32 windowFlags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
+		//u32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
 
 		Window* window = new Window();
 		window->mSdlWindow = SDL_CreateWindow("Redwood", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, windowFlags);
 
-		window->mContext = MakeRef<OpenGLContext>();
-		window->mContext->Init(window);
+		//window->mContext = MakeRef<OpenGLContext>();
+		window->mContext = MakeRef<VulkanContext>(window->mSdlWindow);
+		//window->mContext->Init(window->mSdlWindow);
 
 		return window;
 	}
