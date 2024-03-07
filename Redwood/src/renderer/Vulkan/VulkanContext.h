@@ -32,6 +32,7 @@ namespace rwd {
 		VulkanContext(SDL_Window* sdlWindow);
 		~VulkanContext();
 
+		void DrawFrame();
 		void SwapBuffers() override;
 	private:
 		void CreateVulkanInstance();
@@ -43,6 +44,11 @@ namespace rwd {
 		void CreateRenderPass();
 		void CreateGraphicsPipeline();
 		void CreateFrameBuffers();
+		void CreateCommandPool();
+		void CreateCommandBuffer();
+		void CreateSyncObjects();
+
+		void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex);
 
 		QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice device);
 		SwapChainSupportDetails QuerySwapChainSupport(const VkPhysicalDevice device);
@@ -58,6 +64,13 @@ namespace rwd {
 		std::vector<VkImage> mSwapChainImages;
 		std::vector<VkImageView> mSwapChainImageViews;
 		std::vector<VkFramebuffer> mSwapChainFramebuffers;
+
+		VkCommandPool mCommandPool;
+		VkCommandBuffer mCommandBuffer;
+
+		VkSemaphore mImageAvailableSemaphore;
+		VkSemaphore mRenderFinishedSemaphore;
+		VkFence mInFlightFence;
 
 		VkRenderPass mRenderPass;
 		VkPipelineLayout mPipelineLayout;

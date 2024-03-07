@@ -50,6 +50,7 @@ namespace rwd {
 			}
 		}
 
+		((VulkanContext*)mContext.get())->DrawFrame();
 		mContext->SwapBuffers();
 	}
 
@@ -62,7 +63,6 @@ namespace rwd {
 
 		//window->mContext = MakeRef<OpenGLContext>();
 		window->mContext = MakeRef<VulkanContext>(window->mSdlWindow);
-		//window->mContext->Init(window->mSdlWindow);
 
 		return window;
 	}

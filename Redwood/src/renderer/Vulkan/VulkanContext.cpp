@@ -24,10 +24,21 @@ namespace rwd {
 		CreateRenderPass();
 		CreateGraphicsPipeline();
 		CreateFrameBuffers();
+		CreateCommandPool();
+		CreateCommandBuffer();
+		CreateSyncObjects();
 	}
 
 	// Order of destroying matters!
 	VulkanContext::~VulkanContext() {
+		// Wait for operations on the GPU to finish
+		vkDeviceWaitIdle(mVulkanDevice);
+
+		vkDestroySemaphore(mVulkanDevice, mImageAvailableSemaphore, nullptr);
+		vkDestroySemaphore(mVulkanDevice, mRenderFinishedSemaphore, nullptr);
+		vkDestroyFence(mVulkanDevice, mInFlightFence, nullptr);
+
+		vkDestroyCommandPool(mVulkanDevice, mCommandPool, nullptr);
 		vkDestroyPipeline(mVulkanDevice, mGraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(mVulkanDevice, mPipelineLayout, nullptr);
 		vkDestroyRenderPass(mVulkanDevice, mRenderPass, nullptr);
@@ -44,6 +55,55 @@ namespace rwd {
 		vkDestroyDevice(mVulkanDevice, nullptr);
 		vkDestroySurfaceKHR(mVulkanInstance, mSurface, nullptr);
 		vkDestroyInstance(mVulkanInstance, nullptr);
+	}
+
+	void VulkanContext::DrawFrame() {
+		// Wait for previous frame to finish rendering
+		vkWaitForFences(mVulkanDevice, 1, &mInFlightFence, VK_TRUE, UINT64_MAX);
+		vkResetFences(mVulkanDevice, 1, &mInFlightFence);
+
+		// Grab the next image from our swap chain
+		u32 imageIndex;
+		vkAcquireNextImageKHR(mVulkanDevice, mSwapChain, UINT64_MAX, mImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+		// Fill the command buffer
+		vkResetCommandBuffer(mCommandBuffer, 0);
+		RecordCommandBuffer(mCommandBuffer, imageIndex);
+
+		VkSemaphore waitSemaphores[] = { mImageAvailableSemaphore };
+		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		VkSemaphore signalSemaphores[] = { mRenderFinishedSemaphore };
+
+		VkSubmitInfo submitInfo {
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+
+			// Define what semaphores to wait on before executing
+			.waitSemaphoreCount = 1,
+			.pWaitSemaphores = waitSemaphores,
+			.pWaitDstStageMask = waitStages,
+
+			// Specify command buffer
+			.commandBufferCount = 1,
+			.pCommandBuffers = &mCommandBuffer,
+
+			// Define what semaphores to signal when done
+			.signalSemaphoreCount = 1,
+			.pSignalSemaphores = signalSemaphores,
+		};
+
+		vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mInFlightFence);
+
+		VkSwapchainKHR swapChains[] = { mSwapChain };
+		VkPresentInfoKHR presentInfo {
+			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+			.waitSemaphoreCount = 1,
+			.pWaitSemaphores = signalSemaphores,
+			.swapchainCount = 1,
+			.pSwapchains = swapChains,
+			.pImageIndices = &imageIndex,
+		};
+
+		vkQueuePresentKHR(mPresentQueue, &presentInfo);
 	}
 
 	void VulkanContext::SwapBuffers() {
@@ -631,6 +691,105 @@ namespace rwd {
 		}
 	}
 
+	void VulkanContext::CreateCommandPool() {
+		QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(mPhysicalDevice);
+
+		// Each command pool can only allocate command buffers that 
+		// are submitted on a single type of queue.
+
+		VkCommandPoolCreateInfo poolInfo {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value(),
+		};
+
+		VkResult result = vkCreateCommandPool(mVulkanDevice, &poolInfo, nullptr, &mCommandPool);
+
+		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan command pool");
+	}
+
+	void VulkanContext::CreateCommandBuffer() {
+		VkCommandBufferAllocateInfo allocInfo {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = mCommandPool,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1,
+		};
+
+		VkResult result = vkAllocateCommandBuffers(mVulkanDevice, &allocInfo, &mCommandBuffer);
+
+		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan command pool");
+	}
+
+	void VulkanContext::CreateSyncObjects() {
+		VkSemaphoreCreateInfo semaphoreInfo {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		};
+
+		VkFenceCreateInfo fenceInfo {
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			// Set it to be signaled on creation so first call to wait doesn't block 
+			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
+		};
+
+		vkCreateSemaphore(mVulkanDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphore);
+		vkCreateSemaphore(mVulkanDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphore);
+
+		vkCreateFence(mVulkanDevice, &fenceInfo, nullptr, &mInFlightFence);
+	}
+
+	void VulkanContext::RecordCommandBuffer(VkCommandBuffer cmdBuffer, u32 imageIndex) {
+		VkCommandBufferBeginInfo beginInfo {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = 0, // Optional
+			.pInheritanceInfo = nullptr, // Optional
+		};
+
+		VkResult result = vkBeginCommandBuffer(cmdBuffer, &beginInfo);
+
+		VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+
+		VkRenderPassBeginInfo renderPassInfo {
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = mRenderPass,
+			.framebuffer = mSwapChainFramebuffers[imageIndex],
+			.renderArea {
+				.offset = {0, 0}, 
+				.extent = mSwapChainExtent,
+			},
+			.clearValueCount = 1,
+			.pClearValues = &clearColor,
+		};
+
+		vkCmdBeginRenderPass(cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
+
+		// Set the dynamic states that were specified in the pipeline
+		{
+			VkViewport viewport {
+				.x = 0.0f,
+				.y = 0.0f,
+				.width = (f32)mSwapChainExtent.width,
+				.height = (f32)mSwapChainExtent.height,
+				.minDepth = 0.0f,
+				.maxDepth = 1.0f,
+			};
+
+			VkRect2D scissor {
+				.offset = { 0, 0 },
+				.extent = mSwapChainExtent,
+			};
+
+			vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+			vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
+		}
+
+		vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
+
+		vkCmdEndRenderPass(cmdBuffer);
+		vkEndCommandBuffer(cmdBuffer);
+	}
+
 	void VulkanContext::CreateRenderPass() {
 		VkAttachmentDescription colorAttachment {
 			.format = mSwapChainImageFormat,
@@ -672,12 +831,24 @@ namespace rwd {
 
 		// End define sub passes
 
+		// I don't really understand why we need this
+		VkSubpassDependency dependency {
+			.srcSubpass = VK_SUBPASS_EXTERNAL,
+			.dstSubpass = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			.srcAccessMask = 0,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		};
+
 		VkRenderPassCreateInfo renderPassInfo {
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
 			.attachmentCount = 1,
 			.pAttachments = &colorAttachment,
 			.subpassCount = 1,
 			.pSubpasses = &subpass,
+			.dependencyCount = 1,
+			.pDependencies = &dependency,
 		};
 
 		VkResult result = vkCreateRenderPass(mVulkanDevice, &renderPassInfo, nullptr, &mRenderPass);
