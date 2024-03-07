@@ -30,7 +30,7 @@ namespace rwd {
 	#define RWD_LOG_ERROR(...) SPDLOG_ERROR(__VA_ARGS__)
 	#define RWD_LOG_CRIT(...)  SPDLOG_CRITICAL(__VA_ARGS__); std::exit(0)
 
-	#define RWD_ASSERT(expression, ...) do { if (!expression) { SPDLOG_CRITICAL(__VA_ARGS__); assert(expression); }} while(false)
+	#define RWD_ASSERT(expression, ...) do { if (!(expression)) { SPDLOG_CRITICAL(__VA_ARGS__); assert(expression); }} while(false)
 
 #else
 

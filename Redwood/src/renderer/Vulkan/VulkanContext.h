@@ -39,6 +39,10 @@ namespace rwd {
 		void SelectPhysicalDevice();
 		void CreateLogicalDevice();
 		void CreateSwapChain();
+		void CreateSwapChainImageViews();
+		void CreateRenderPass();
+		void CreateGraphicsPipeline();
+		void CreateFrameBuffers();
 
 		QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice device);
 		SwapChainSupportDetails QuerySwapChainSupport(const VkPhysicalDevice device);
@@ -46,8 +50,22 @@ namespace rwd {
 	private:
 		VkInstance mVulkanInstance;
 		VkSurfaceKHR mSurface;
+
+		VkSwapchainKHR mSwapChain;
+		VkFormat mSwapChainImageFormat;
+		VkExtent2D mSwapChainExtent;
+
+		std::vector<VkImage> mSwapChainImages;
+		std::vector<VkImageView> mSwapChainImageViews;
+		std::vector<VkFramebuffer> mSwapChainFramebuffers;
+
+		VkRenderPass mRenderPass;
+		VkPipelineLayout mPipelineLayout;
+		VkPipeline mGraphicsPipeline;
+
 		VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
 		VkDevice mVulkanDevice;
+
 		VkQueue mGraphicsQueue;
 		VkQueue mPresentQueue;
 	};
