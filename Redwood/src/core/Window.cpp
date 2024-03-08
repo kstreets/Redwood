@@ -33,9 +33,12 @@ namespace rwd {
 							int newWidth = sdlEvent.window.data1;
 							int newHeight = sdlEvent.window.data2;
 
-							WindowResizeEvent e;
-							e.width = newWidth;
-							e.height = newHeight;
+							mContext->ResizeRenderingSurface(newWidth, newHeight);
+
+							WindowResizeEvent e {
+								.width = newWidth,
+								.height = newHeight,
+							};
 							windowResizeEventHandler.Dispatch(e);
 							break;
 						}

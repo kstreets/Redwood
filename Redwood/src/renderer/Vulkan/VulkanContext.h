@@ -34,6 +34,7 @@ namespace rwd {
 
 		void DrawFrame();
 		void SwapBuffers() override;
+		void ResizeRenderingSurface(const u32 width, const u32 height) override;
 	private:
 		void CreateVulkanInstance();
 		bool VerifyValidationLayers();
@@ -45,10 +46,13 @@ namespace rwd {
 		void CreateGraphicsPipeline();
 		void CreateFrameBuffers();
 		void CreateCommandPool();
-		void CreateCommandBuffer();
+		void CreateCommandBuffers();
 		void CreateSyncObjects();
 
 		void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex);
+
+		void RecreateSwapChain();
+		void DestroySwapChain();
 
 		QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice device);
 		SwapChainSupportDetails QuerySwapChainSupport(const VkPhysicalDevice device);
@@ -66,11 +70,11 @@ namespace rwd {
 		std::vector<VkFramebuffer> mSwapChainFramebuffers;
 
 		VkCommandPool mCommandPool;
-		VkCommandBuffer mCommandBuffer;
+		std::vector<VkCommandBuffer> mCommandBuffers;
 
-		VkSemaphore mImageAvailableSemaphore;
-		VkSemaphore mRenderFinishedSemaphore;
-		VkFence mInFlightFence;
+		std::vector<VkSemaphore> mImageAvailableSemaphores;
+		std::vector<VkSemaphore> mRenderFinishedSemaphores;
+		std::vector<VkFence> mInFlightFences;
 
 		VkRenderPass mRenderPass;
 		VkPipelineLayout mPipelineLayout;
@@ -81,6 +85,10 @@ namespace rwd {
 
 		VkQueue mGraphicsQueue;
 		VkQueue mPresentQueue;
+
+		u32 mCurFrame;
+
+		bool mRecreateSwapChain;
 	};
 
 }

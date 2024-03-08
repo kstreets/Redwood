@@ -5,6 +5,8 @@
 
 namespace rwd {
 
+	const u32 MAX_FRAMES_IN_FLIGHT = 2;
+
 	const std::vector<const char*> validationLayers = {
 		"VK_LAYER_KHRONOS_validation",
 	};
@@ -13,9 +15,13 @@ namespace rwd {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	};
 
-	VulkanContext::VulkanContext(SDL_Window* sdlWindow) 
-		: Context(sdlWindow)
+	VulkanContext::VulkanContext(SDL_Window* sdlWindow)
+		: Context(sdlWindow), mCurFrame(0), mRecreateSwapChain(false)
 	{
+		i32 width, height;
+		SDL_GetWindowSize(sdlWindow, &width, &height);
+		mSwapChainExtent = VkExtent2D(width, height);
+
 		CreateVulkanInstance();
 		SelectPhysicalDevice();
 		CreateLogicalDevice();
@@ -25,7 +31,7 @@ namespace rwd {
 		CreateGraphicsPipeline();
 		CreateFrameBuffers();
 		CreateCommandPool();
-		CreateCommandBuffer();
+		CreateCommandBuffers();
 		CreateSyncObjects();
 	}
 
@@ -34,24 +40,19 @@ namespace rwd {
 		// Wait for operations on the GPU to finish
 		vkDeviceWaitIdle(mVulkanDevice);
 
-		vkDestroySemaphore(mVulkanDevice, mImageAvailableSemaphore, nullptr);
-		vkDestroySemaphore(mVulkanDevice, mRenderFinishedSemaphore, nullptr);
-		vkDestroyFence(mVulkanDevice, mInFlightFence, nullptr);
+		DestroySwapChain();
+
+		for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			vkDestroySemaphore(mVulkanDevice, mImageAvailableSemaphores[i], nullptr);
+			vkDestroySemaphore(mVulkanDevice, mRenderFinishedSemaphores[i], nullptr);
+			vkDestroyFence(mVulkanDevice, mInFlightFences[i], nullptr);
+		}
 
 		vkDestroyCommandPool(mVulkanDevice, mCommandPool, nullptr);
 		vkDestroyPipeline(mVulkanDevice, mGraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(mVulkanDevice, mPipelineLayout, nullptr);
 		vkDestroyRenderPass(mVulkanDevice, mRenderPass, nullptr);
 
-		for (const auto& framebuffer : mSwapChainFramebuffers) {
-			vkDestroyFramebuffer(mVulkanDevice, framebuffer, nullptr);
-		}
-
-		for (const auto& imageView : mSwapChainImageViews) {
-			vkDestroyImageView(mVulkanDevice, imageView, nullptr);
-		}
-
-		vkDestroySwapchainKHR(mVulkanDevice, mSwapChain, nullptr);
 		vkDestroyDevice(mVulkanDevice, nullptr);
 		vkDestroySurfaceKHR(mVulkanInstance, mSurface, nullptr);
 		vkDestroyInstance(mVulkanInstance, nullptr);
@@ -59,39 +60,51 @@ namespace rwd {
 
 	void VulkanContext::DrawFrame() {
 		// Wait for previous frame to finish rendering
-		vkWaitForFences(mVulkanDevice, 1, &mInFlightFence, VK_TRUE, UINT64_MAX);
-		vkResetFences(mVulkanDevice, 1, &mInFlightFence);
+		vkWaitForFences(mVulkanDevice, 1, &mInFlightFences[mCurFrame], VK_TRUE, UINT64_MAX);
+
+		if (mRecreateSwapChain) {
+			RecreateSwapChain();
+			mRecreateSwapChain = false;
+			return;
+		}
+
+		vkResetFences(mVulkanDevice, 1, &mInFlightFences[mCurFrame]);
 
 		// Grab the next image from our swap chain
 		u32 imageIndex;
-		vkAcquireNextImageKHR(mVulkanDevice, mSwapChain, UINT64_MAX, mImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+		vkAcquireNextImageKHR(mVulkanDevice, mSwapChain, UINT64_MAX, mImageAvailableSemaphores[mCurFrame], VK_NULL_HANDLE, &imageIndex);
 
 		// Fill the command buffer
-		vkResetCommandBuffer(mCommandBuffer, 0);
-		RecordCommandBuffer(mCommandBuffer, imageIndex);
+		vkResetCommandBuffer(mCommandBuffers[mCurFrame], 0);
+		RecordCommandBuffer(mCommandBuffers[mCurFrame], imageIndex);
 
-		VkSemaphore waitSemaphores[] = { mImageAvailableSemaphore };
+		// We want to wait with writing colors to the image until its available, 
+		// so were specifying the stage of the graphics pipeline that writes to the color attachment. 
+		// That means that theoretically the implementation can already start executing our vertex shader 
+		// and such while the image is not yet available.
+		VkSemaphore waitSemaphores[] = { mImageAvailableSemaphores[mCurFrame]};
 		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-		VkSemaphore signalSemaphores[] = { mRenderFinishedSemaphore };
+
+		VkSemaphore signalSemaphores[] = { mRenderFinishedSemaphores[mCurFrame] };
 
 		VkSubmitInfo submitInfo {
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 
-			// Define what semaphores to wait on before executing
+			// Set what pipeline stages we pause and wait for before continuing 
 			.waitSemaphoreCount = 1,
 			.pWaitSemaphores = waitSemaphores,
 			.pWaitDstStageMask = waitStages,
 
 			// Specify command buffer
 			.commandBufferCount = 1,
-			.pCommandBuffers = &mCommandBuffer,
+			.pCommandBuffers = &mCommandBuffers[mCurFrame],
 
 			// Define what semaphores to signal when done
 			.signalSemaphoreCount = 1,
 			.pSignalSemaphores = signalSemaphores,
 		};
 
-		vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mInFlightFence);
+		vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mInFlightFences[mCurFrame]);
 
 		VkSwapchainKHR swapChains[] = { mSwapChain };
 		VkPresentInfoKHR presentInfo {
@@ -104,10 +117,17 @@ namespace rwd {
 		};
 
 		vkQueuePresentKHR(mPresentQueue, &presentInfo);
+		
+		mCurFrame = (mCurFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
 	void VulkanContext::SwapBuffers() {
 
+	}
+
+	void VulkanContext::ResizeRenderingSurface(const u32 width, const u32 height) {
+		mRecreateSwapChain = true;
+		mSwapChainExtent = VkExtent2D(width, height);
 	}
 
 	void VulkanContext::CreateVulkanInstance() {
@@ -407,7 +427,7 @@ namespace rwd {
 
 		// Keep a reference to these swap chain settings
 		mSwapChainImageFormat = swapChainSettings.surfaceFormat.format;
-		mSwapChainExtent = swapChainSettings.extent;
+		//mSwapChainExtent = swapChainSettings.extent;
 	}
 
 	void VulkanContext::CreateSwapChainImageViews() {
@@ -708,20 +728,26 @@ namespace rwd {
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan command pool");
 	}
 
-	void VulkanContext::CreateCommandBuffer() {
+	void VulkanContext::CreateCommandBuffers() {
+		mCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
 		VkCommandBufferAllocateInfo allocInfo {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 			.commandPool = mCommandPool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-			.commandBufferCount = 1,
+			.commandBufferCount = (uint32_t)mCommandBuffers.size(),
 		};
 
-		VkResult result = vkAllocateCommandBuffers(mVulkanDevice, &allocInfo, &mCommandBuffer);
+		VkResult result = vkAllocateCommandBuffers(mVulkanDevice, &allocInfo, mCommandBuffers.data());
 
-		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan command pool");
+		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan command buffers");
 	}
 
 	void VulkanContext::CreateSyncObjects() {
+		mImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+		mRenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+		mInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+
 		VkSemaphoreCreateInfo semaphoreInfo {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 		};
@@ -732,10 +758,11 @@ namespace rwd {
 			.flags = VK_FENCE_CREATE_SIGNALED_BIT,
 		};
 
-		vkCreateSemaphore(mVulkanDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphore);
-		vkCreateSemaphore(mVulkanDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphore);
-
-		vkCreateFence(mVulkanDevice, &fenceInfo, nullptr, &mInFlightFence);
+		for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			vkCreateSemaphore(mVulkanDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]);
+			vkCreateSemaphore(mVulkanDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]);
+			vkCreateFence(mVulkanDevice, &fenceInfo, nullptr, &mInFlightFences[i]);
+		}
 	}
 
 	void VulkanContext::RecordCommandBuffer(VkCommandBuffer cmdBuffer, u32 imageIndex) {
@@ -790,6 +817,29 @@ namespace rwd {
 		vkEndCommandBuffer(cmdBuffer);
 	}
 
+	void VulkanContext::RecreateSwapChain() {
+		// Wait for operations on the GPU to finish
+		vkDeviceWaitIdle(mVulkanDevice);
+
+		DestroySwapChain();
+
+		CreateSwapChain();
+		CreateSwapChainImageViews();
+		CreateFrameBuffers();
+	}
+
+	void VulkanContext::DestroySwapChain() {
+		for (const auto& framebuffer : mSwapChainFramebuffers) {
+			vkDestroyFramebuffer(mVulkanDevice, framebuffer, nullptr);
+		}
+
+		for (const auto& imageView : mSwapChainImageViews) {
+			vkDestroyImageView(mVulkanDevice, imageView, nullptr);
+		}
+
+		vkDestroySwapchainKHR(mVulkanDevice, mSwapChain, nullptr);
+	}
+
 	void VulkanContext::CreateRenderPass() {
 		VkAttachmentDescription colorAttachment {
 			.format = mSwapChainImageFormat,
@@ -831,14 +881,25 @@ namespace rwd {
 
 		// End define sub passes
 
-		// I don't really understand why we need this
+		// There are two implicit sub passes that occur at the start and end of a render pass
+		// However, when submitting our drawing commands, we don't wait for the next swap chain
+		// image to be ready for use yet, so we can go ahead and execute the vertex shader, but
+		// then after we go ahead and wait for setting pixels (Color Attachment) to the image
+		// 
+		// So technically we won't always have a swap chain image to render to when starting the
+		// render pass, so we can't have the starting implicit sub pass execute at the default time
+		// 
+		// The VkSubpassDependency struct is what we can use to instruct the starting implicit sub
+		// pass to occur at a different stage in the pipeline, preferably when we have an image
 		VkSubpassDependency dependency {
-			.srcSubpass = VK_SUBPASS_EXTERNAL,
-			.dstSubpass = 0,
-			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.srcAccessMask = 0,
-			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			.srcSubpass = VK_SUBPASS_EXTERNAL, // Implicit subpass index (setting it to src means start)
+			.dstSubpass = 0,                   // Our subpass index
+
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // Operation to wait for
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // Operation to wait for
+
+			.srcAccessMask = 0,                                    // Requires nothing
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, // Requires writing to color attachment
 		};
 
 		VkRenderPassCreateInfo renderPassInfo {
@@ -942,7 +1003,7 @@ namespace rwd {
 		// from the passed in swap chain details is max, then we assert.
 		RWD_ASSERT(supportDetails.capabilities.currentExtent.width != UINT32_MAX, 
 			"Failed to find appropriate Vulkan swap chain extent resolution");
-		chosenSettings.extent = supportDetails.capabilities.currentExtent;
+		chosenSettings.extent = mSwapChainExtent;
 
 		return chosenSettings;
 	}

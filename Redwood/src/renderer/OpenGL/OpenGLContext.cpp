@@ -25,4 +25,8 @@ namespace rwd {
 		SDL_GL_SwapWindow(mSdlWindow);
 	}
 
+	void OpenGLContext::ResizeRenderingSurface(const u32 width, const u32 height)
+	{
+	}
+
 }

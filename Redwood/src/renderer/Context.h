@@ -11,6 +11,7 @@ namespace rwd {
 		virtual ~Context() = default;
 
 		virtual void SwapBuffers() = 0;
+		virtual void ResizeRenderingSurface(const u32 width, const u32 height) = 0;
 	protected:
 		SDL_Window* mSdlWindow;
 	};

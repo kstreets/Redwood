@@ -9,6 +9,7 @@ namespace rwd {
 		~OpenGLContext();
 
 		void SwapBuffers() override;
+		void ResizeRenderingSurface(const u32 width, const u32 height) override;
 	private:
 		SDL_GLContext mSdlGLContext;
 	};
