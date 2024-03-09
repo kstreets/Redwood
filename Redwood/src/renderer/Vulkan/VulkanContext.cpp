@@ -62,6 +62,16 @@ namespace rwd {
 		CreateVulkanInstance();
 		SelectPhysicalDevice();
 		CreateLogicalDevice();
+
+		VmaAllocatorCreateInfo allocatorCreateInfo { };
+		allocatorCreateInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+		allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_1;
+		allocatorCreateInfo.physicalDevice = sPhysicalDevice;
+		allocatorCreateInfo.device = sVulkanDevice;
+		allocatorCreateInfo.instance = mVulkanInstance;
+
+		vmaCreateAllocator(&allocatorCreateInfo, &sCustomAllocator);
+
 		CreateSwapChain();
 		CreateSwapChainImageViews();
 		CreateRenderPass();
@@ -77,6 +87,8 @@ namespace rwd {
 		// Wait for operations on the GPU to finish
 		vkDeviceWaitIdle(sVulkanDevice);
 
+		vmaDestroyAllocator(sCustomAllocator);
+
 		DestroySwapChain();
 
 		for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -85,7 +97,7 @@ namespace rwd {
 			vkDestroyFence(sVulkanDevice, mInFlightFences[i], nullptr);
 		}
 
-		vkDestroyCommandPool(sVulkanDevice, mCommandPool, nullptr);
+		vkDestroyCommandPool(sVulkanDevice, sCommandPool, nullptr);
 		vkDestroyPipeline(sVulkanDevice, mGraphicsPipeline, nullptr);
 		vkDestroyPipelineLayout(sVulkanDevice, mPipelineLayout, nullptr);
 		vkDestroyRenderPass(sVulkanDevice, mRenderPass, nullptr);
@@ -141,7 +153,7 @@ namespace rwd {
 			.pSignalSemaphores = signalSemaphores,
 		};
 
-		vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, mInFlightFences[mCurFrame]);
+		vkQueueSubmit(sGraphicsQueue, 1, &submitInfo, mInFlightFences[mCurFrame]);
 
 		VkSwapchainKHR swapChains[] = { mSwapChain };
 		VkPresentInfoKHR presentInfo {
@@ -172,6 +184,10 @@ namespace rwd {
 		return sVulkanDevice;
 	}
 
+	const VmaAllocator VulkanContext::CustomAllocator() {
+		return sCustomAllocator;
+	}
+
 	u32 VulkanContext::FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags props) {
 		VkPhysicalDeviceMemoryProperties memProps;
 		vkGetPhysicalDeviceMemoryProperties(sPhysicalDevice, &memProps);
@@ -195,7 +211,7 @@ namespace rwd {
 		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 		appInfo.pEngineName = "No Engine";
 		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-		appInfo.apiVersion = VK_API_VERSION_1_0;
+		appInfo.apiVersion = VK_API_VERSION_1_1;
 
 		VkInstanceCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -401,7 +417,7 @@ namespace rwd {
 		// Next we grab references to ALL device queues which were created along side our Vulkan device
 		// Device queues get cleaned up when destroying the Vulkan device their associated with
 		{
-			vkGetDeviceQueue(sVulkanDevice, queueIndices.graphicsFamily.value(), 0, &mGraphicsQueue);
+			vkGetDeviceQueue(sVulkanDevice, queueIndices.graphicsFamily.value(), 0, &sGraphicsQueue);
 			vkGetDeviceQueue(sVulkanDevice, queueIndices.presentFamily.value(), 0, &mPresentQueue);
 		}
 	}
@@ -782,7 +798,7 @@ namespace rwd {
 			.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value(),
 		};
 
-		VkResult result = vkCreateCommandPool(sVulkanDevice, &poolInfo, nullptr, &mCommandPool);
+		VkResult result = vkCreateCommandPool(sVulkanDevice, &poolInfo, nullptr, &sCommandPool);
 
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan command pool");
 	}
@@ -792,7 +808,7 @@ namespace rwd {
 
 		VkCommandBufferAllocateInfo allocInfo {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = mCommandPool,
+			.commandPool = sCommandPool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = (uint32_t)mCommandBuffers.size(),
 		};
@@ -886,7 +902,7 @@ namespace rwd {
 		VkCommandBufferAllocateInfo allocInfo { };
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandPool = mCommandPool;
+		allocInfo.commandPool = sCommandPool;
 		allocInfo.commandBufferCount = 1;
 
 		VkCommandBuffer commandBuffer;
@@ -911,10 +927,10 @@ namespace rwd {
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-		vkQueueWaitIdle(mGraphicsQueue);
+		vkQueueSubmit(sGraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+		vkQueueWaitIdle(sGraphicsQueue);
 
-		vkFreeCommandBuffers(sVulkanDevice, mCommandPool, 1, &commandBuffer);
+		vkFreeCommandBuffers(sVulkanDevice, sCommandPool, 1, &commandBuffer);
 	}
 
 	void VulkanContext::RecreateSwapChain() {

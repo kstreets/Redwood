@@ -35,6 +35,7 @@ project "Redwood"
 		"%{prj.name}/vendor/spdlog/include",
 		"%{prj.name}/vendor/glm",
 		"%{prj.name}/vendor/glad",
+		"%{prj.name}/vendor/VulkanMemoryAllocator/include",
 	}
 
 	libdirs {

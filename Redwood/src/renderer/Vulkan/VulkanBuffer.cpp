@@ -1,66 +1,58 @@
 #include "pch.h"
 #include "core/Log.h"
-#include "VulkanContext.h"
 #include "VulkanBuffer.h"
 
 namespace rwd {
 
-	static void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags props, 
-		VkBuffer& buffer, VkDeviceMemory& bufferMemory) 
+	static void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags bufferUsage, VmaMemoryUsage memoryUsage, 
+		VkBuffer& buffer, VmaAllocation& bufferMemory) 
 	{
 		VkBufferCreateInfo bufferInfo { };
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufferInfo.size = size;
-		bufferInfo.usage = usage;
+		bufferInfo.usage = bufferUsage;
 		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 		VkDevice device = VulkanContext::VulkanDevice();
+		VmaAllocator allocator = VulkanContext::CustomAllocator();
 
-		VkResult result = vkCreateBuffer(device, &bufferInfo, nullptr, &buffer);
+		VmaAllocationCreateInfo allocInfo { };
+		allocInfo.usage = memoryUsage;
+
+		VkResult result = vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &buffer, &bufferMemory, nullptr);
+
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan buffer");
-
-		VkMemoryRequirements memRequirements;
-		vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
-
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = VulkanContext::FindMemoryType(memRequirements.memoryTypeBits, props);
-
-		result = vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory);
-		RWD_ASSERT(result == VK_SUCCESS, "Failed to allocate memory for Vulkan vertex buffer");
-
-		vkBindBufferMemory(device, buffer, bufferMemory, 0);
 	}
-
+	
 	VulkanVertexBuffer::VulkanVertexBuffer(void* verts, u32 size) {
 		VkDevice device = VulkanContext::VulkanDevice();
+		VmaAllocator allocator = VulkanContext::CustomAllocator();
 
 		VkBuffer stagingBuffer;
-		VkDeviceMemory stagingBufferMemory;
+		VmaAllocation stagingBufferMemory;
 
 		VkBufferUsageFlags stagingUsage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-		VkMemoryPropertyFlags stagingProps = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-		CreateBuffer(size, stagingUsage, stagingProps, stagingBuffer, stagingBufferMemory);
+		CreateBuffer(size, stagingUsage, VMA_MEMORY_USAGE_CPU_TO_GPU, stagingBuffer, stagingBufferMemory);
 
 		void* data;
-		vkMapMemory(device, stagingBufferMemory, 0, size, 0, &data);
+		vmaMapMemory(allocator, stagingBufferMemory, &data);
 		memcpy(data, verts, size);
-		vkUnmapMemory(device, stagingBufferMemory);
+		vmaUnmapMemory(allocator, stagingBufferMemory);
 
 		VkBufferUsageFlags vertexUsage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-		VkMemoryPropertyFlags vertexProps = VK_MEMORY_HEAP_DEVICE_LOCAL_BIT;
-		CreateBuffer(size, vertexUsage, vertexProps, mBuffer, mBufferMemory);
+		CreateBuffer(size, vertexUsage, VMA_MEMORY_USAGE_GPU_ONLY, mBuffer, mBufferMemory);
 
 		VulkanContext::CopyBuffer(stagingBuffer, mBuffer, size);
 
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
-		vkFreeMemory(device, stagingBufferMemory, nullptr);
+		vmaFreeMemory(allocator, stagingBufferMemory);
 	}
 
 	VulkanVertexBuffer::~VulkanVertexBuffer() {
 		VkDevice device = VulkanContext::VulkanDevice();
-		vkFreeMemory(device, mBufferMemory, nullptr);
+		VmaAllocator allocator = VulkanContext::CustomAllocator();
+
+		vmaFreeMemory(allocator, mBufferMemory);
 		vkDestroyBuffer(device, mBuffer, nullptr);
 	}
 

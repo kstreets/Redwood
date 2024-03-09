@@ -1,5 +1,6 @@
 #pragma once
 #include "vulkan/vulkan.hpp"
+#include "VulkanContext.h"
 #include "renderer/Buffer.h"
 
 namespace rwd {
@@ -15,7 +16,7 @@ namespace rwd {
 		void BufferData(const u8* bytes) override;
 	private:
 		VkBuffer mBuffer;
-		VkDeviceMemory mBufferMemory;
+		VmaAllocation mBufferMemory;
 	};
 
 	class VulkanIndexBuffer : public IndexBuffer {

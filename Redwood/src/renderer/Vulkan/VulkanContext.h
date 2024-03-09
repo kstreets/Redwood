@@ -1,7 +1,8 @@
 #pragma once
 #include <optional>
-#include "core/Core.h"
 #include "vulkan/vulkan.h"
+#include "vk_mem_alloc.h"
+#include "core/Core.h"
 #include "renderer/Context.h"
 
 namespace rwd {
@@ -37,6 +38,8 @@ namespace rwd {
 		void ResizeRenderingSurface(const u32 width, const u32 height) override;
 
 		static const VkDevice VulkanDevice();
+		static const VmaAllocator CustomAllocator();
+
 		static u32 FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags props);
 		static void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	private:
@@ -83,6 +86,8 @@ namespace rwd {
 		VkRenderPass mRenderPass;
 		VkPipelineLayout mPipelineLayout;
 		VkPipeline mGraphicsPipeline;
+
+		inline static VmaAllocator sCustomAllocator;
 
 		inline static VkPhysicalDevice sPhysicalDevice = VK_NULL_HANDLE;
 		inline static VkDevice sVulkanDevice = VK_NULL_HANDLE;
