@@ -35,6 +35,10 @@ namespace rwd {
 		void DrawFrame();
 		void SwapBuffers() override;
 		void ResizeRenderingSurface(const u32 width, const u32 height) override;
+
+		static const VkDevice VulkanDevice();
+		static u32 FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags props);
+		static void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	private:
 		void CreateVulkanInstance();
 		bool VerifyValidationLayers();
@@ -69,7 +73,7 @@ namespace rwd {
 		std::vector<VkImageView> mSwapChainImageViews;
 		std::vector<VkFramebuffer> mSwapChainFramebuffers;
 
-		VkCommandPool mCommandPool;
+		inline static VkCommandPool sCommandPool;
 		std::vector<VkCommandBuffer> mCommandBuffers;
 
 		std::vector<VkSemaphore> mImageAvailableSemaphores;
@@ -80,10 +84,10 @@ namespace rwd {
 		VkPipelineLayout mPipelineLayout;
 		VkPipeline mGraphicsPipeline;
 
-		VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;
-		VkDevice mVulkanDevice;
+		inline static VkPhysicalDevice sPhysicalDevice = VK_NULL_HANDLE;
+		inline static VkDevice sVulkanDevice = VK_NULL_HANDLE;
 
-		VkQueue mGraphicsQueue;
+		inline static VkQueue sGraphicsQueue;
 		VkQueue mPresentQueue;
 
 		u32 mCurFrame;

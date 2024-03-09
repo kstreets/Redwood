@@ -1,9 +1,46 @@
 #include "pch.h"
 #include "SDL_vulkan.h"
 #include "core/Log.h"
+#include "core/Math.h"
+#include "VulkanBuffer.h"
 #include "VulkanContext.h"
 
 namespace rwd {
+
+	struct Vertex {
+		Vec2 pos;
+		Vec3 color;
+
+		static VkVertexInputBindingDescription getBindingDescription() {
+			VkVertexInputBindingDescription bindingDescription{};
+			bindingDescription.binding = 0;
+			bindingDescription.stride = sizeof(Vertex);
+			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			return bindingDescription;
+		}
+
+		static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
+			std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+
+			attributeDescriptions[0].binding = 0;
+			attributeDescriptions[0].location = 0;
+			attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+			attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+			attributeDescriptions[1].binding = 0;
+			attributeDescriptions[1].location = 1;
+			attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+			return attributeDescriptions;
+		}
+	};
+
+	const std::vector<Vertex> vertices = {
+		{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+	};
 
 	const u32 MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -38,29 +75,29 @@ namespace rwd {
 	// Order of destroying matters!
 	VulkanContext::~VulkanContext() {
 		// Wait for operations on the GPU to finish
-		vkDeviceWaitIdle(mVulkanDevice);
+		vkDeviceWaitIdle(sVulkanDevice);
 
 		DestroySwapChain();
 
 		for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			vkDestroySemaphore(mVulkanDevice, mImageAvailableSemaphores[i], nullptr);
-			vkDestroySemaphore(mVulkanDevice, mRenderFinishedSemaphores[i], nullptr);
-			vkDestroyFence(mVulkanDevice, mInFlightFences[i], nullptr);
+			vkDestroySemaphore(sVulkanDevice, mImageAvailableSemaphores[i], nullptr);
+			vkDestroySemaphore(sVulkanDevice, mRenderFinishedSemaphores[i], nullptr);
+			vkDestroyFence(sVulkanDevice, mInFlightFences[i], nullptr);
 		}
 
-		vkDestroyCommandPool(mVulkanDevice, mCommandPool, nullptr);
-		vkDestroyPipeline(mVulkanDevice, mGraphicsPipeline, nullptr);
-		vkDestroyPipelineLayout(mVulkanDevice, mPipelineLayout, nullptr);
-		vkDestroyRenderPass(mVulkanDevice, mRenderPass, nullptr);
+		vkDestroyCommandPool(sVulkanDevice, mCommandPool, nullptr);
+		vkDestroyPipeline(sVulkanDevice, mGraphicsPipeline, nullptr);
+		vkDestroyPipelineLayout(sVulkanDevice, mPipelineLayout, nullptr);
+		vkDestroyRenderPass(sVulkanDevice, mRenderPass, nullptr);
 
-		vkDestroyDevice(mVulkanDevice, nullptr);
+		vkDestroyDevice(sVulkanDevice, nullptr);
 		vkDestroySurfaceKHR(mVulkanInstance, mSurface, nullptr);
 		vkDestroyInstance(mVulkanInstance, nullptr);
 	}
 
 	void VulkanContext::DrawFrame() {
 		// Wait for previous frame to finish rendering
-		vkWaitForFences(mVulkanDevice, 1, &mInFlightFences[mCurFrame], VK_TRUE, UINT64_MAX);
+		vkWaitForFences(sVulkanDevice, 1, &mInFlightFences[mCurFrame], VK_TRUE, UINT64_MAX);
 
 		if (mRecreateSwapChain) {
 			RecreateSwapChain();
@@ -68,11 +105,11 @@ namespace rwd {
 			return;
 		}
 
-		vkResetFences(mVulkanDevice, 1, &mInFlightFences[mCurFrame]);
+		vkResetFences(sVulkanDevice, 1, &mInFlightFences[mCurFrame]);
 
 		// Grab the next image from our swap chain
 		u32 imageIndex;
-		vkAcquireNextImageKHR(mVulkanDevice, mSwapChain, UINT64_MAX, mImageAvailableSemaphores[mCurFrame], VK_NULL_HANDLE, &imageIndex);
+		vkAcquireNextImageKHR(sVulkanDevice, mSwapChain, UINT64_MAX, mImageAvailableSemaphores[mCurFrame], VK_NULL_HANDLE, &imageIndex);
 
 		// Fill the command buffer
 		vkResetCommandBuffer(mCommandBuffers[mCurFrame], 0);
@@ -128,6 +165,26 @@ namespace rwd {
 	void VulkanContext::ResizeRenderingSurface(const u32 width, const u32 height) {
 		mRecreateSwapChain = true;
 		mSwapChainExtent = VkExtent2D(width, height);
+	}
+
+	const VkDevice VulkanContext::VulkanDevice() {
+		RWD_ASSERT(sVulkanDevice != VK_NULL_HANDLE, "Logical Vulkan device is uninitialized");
+		return sVulkanDevice;
+	}
+
+	u32 VulkanContext::FindMemoryType(u32 typeFilter, VkMemoryPropertyFlags props) {
+		VkPhysicalDeviceMemoryProperties memProps;
+		vkGetPhysicalDeviceMemoryProperties(sPhysicalDevice, &memProps);
+
+		for (u32 i = 0; i < memProps.memoryTypeCount; i++) {
+			bool memoryTypeIsSuitable = typeFilter & (1 << i);
+			bool memoryTypeMatchesProps = (memProps.memoryTypes[i].propertyFlags & props) == props;
+			if (memoryTypeIsSuitable && memoryTypeMatchesProps) {
+				return i;
+			}
+		}
+
+		RWD_LOG_CRIT("Failed to find suitable memory");
 	}
 
 	void VulkanContext::CreateVulkanInstance() {
@@ -262,17 +319,17 @@ namespace rwd {
 			}
 
 			if (isDedicatedGpu && hasGeometryShader && supportsQueueFamilies && supportsExtensions && swapChainAdequate) {
-				mPhysicalDevice = device;
+				sPhysicalDevice = device;
 				RWD_LOG("Chosen Vulkan device '{0}'", props.deviceName);
 				break;
 			}
 		}
 
-		RWD_ASSERT(mPhysicalDevice != VK_NULL_HANDLE, "Failed to choose Vulkan device");
+		RWD_ASSERT(sPhysicalDevice != VK_NULL_HANDLE, "Failed to choose Vulkan device");
 	}
 
 	void VulkanContext::CreateLogicalDevice() {
-		QueueFamilyIndices queueIndices = FindQueueFamilies(mPhysicalDevice);
+		QueueFamilyIndices queueIndices = FindQueueFamilies(sPhysicalDevice);
 
 		// Before creating our logical device, we need to specify what family queues we want
 		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
@@ -335,7 +392,7 @@ namespace rwd {
 		}
 
 		// Create our Vulkan device!
-		VkResult result = vkCreateDevice(mPhysicalDevice, &createInfo, nullptr, &mVulkanDevice);
+		VkResult result = vkCreateDevice(sPhysicalDevice, &createInfo, nullptr, &sVulkanDevice);
 
 		if (result != VK_SUCCESS) {
 			RWD_LOG_ERROR("Failed to create logical Vulkan device");
@@ -344,13 +401,13 @@ namespace rwd {
 		// Next we grab references to ALL device queues which were created along side our Vulkan device
 		// Device queues get cleaned up when destroying the Vulkan device their associated with
 		{
-			vkGetDeviceQueue(mVulkanDevice, queueIndices.graphicsFamily.value(), 0, &mGraphicsQueue);
-			vkGetDeviceQueue(mVulkanDevice, queueIndices.presentFamily.value(), 0, &mPresentQueue);
+			vkGetDeviceQueue(sVulkanDevice, queueIndices.graphicsFamily.value(), 0, &mGraphicsQueue);
+			vkGetDeviceQueue(sVulkanDevice, queueIndices.presentFamily.value(), 0, &mPresentQueue);
 		}
 	}
 
 	void VulkanContext::CreateSwapChain() {
-		auto swapChainSupport = QuerySwapChainSupport(mPhysicalDevice);
+		auto swapChainSupport = QuerySwapChainSupport(sPhysicalDevice);
 		auto swapChainSettings = GetOptimalSwapChainSettings(swapChainSupport);
 
 		// Decide how many images we want in the swap chain.
@@ -379,7 +436,7 @@ namespace rwd {
 
 		// Specify how to handle swap chain images across multiple family queues
 		{
-			QueueFamilyIndices indices = FindQueueFamilies(mPhysicalDevice);
+			QueueFamilyIndices indices = FindQueueFamilies(sPhysicalDevice);
 			uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
 			// If the graphics queue family and presentation queue family are the same, 
@@ -415,15 +472,15 @@ namespace rwd {
 		createInfo.oldSwapchain = VK_NULL_HANDLE;
 
 		// Create the swap chain!
-		VkResult result = vkCreateSwapchainKHR(mVulkanDevice, &createInfo, nullptr, &mSwapChain);
+		VkResult result = vkCreateSwapchainKHR(sVulkanDevice, &createInfo, nullptr, &mSwapChain);
 
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan swap chain");
 
 		// Grab the swap chain images, which could be more that our previously
 		// defined image count since that was used to specify the MINUMUM number
-		vkGetSwapchainImagesKHR(mVulkanDevice, mSwapChain, &imageCount, nullptr);
+		vkGetSwapchainImagesKHR(sVulkanDevice, mSwapChain, &imageCount, nullptr);
 		mSwapChainImages.resize(imageCount);
-		vkGetSwapchainImagesKHR(mVulkanDevice, mSwapChain, &imageCount, mSwapChainImages.data());
+		vkGetSwapchainImagesKHR(sVulkanDevice, mSwapChain, &imageCount, mSwapChainImages.data());
 
 		// Keep a reference to these swap chain settings
 		mSwapChainImageFormat = swapChainSettings.surfaceFormat.format;
@@ -456,7 +513,7 @@ namespace rwd {
 			createInfo.subresourceRange.layerCount = 1;
 
 			// Create the image view!
-			VkResult result = vkCreateImageView(mVulkanDevice, &createInfo, nullptr, &mSwapChainImageViews[i]);
+			VkResult result = vkCreateImageView(sVulkanDevice, &createInfo, nullptr, &mSwapChainImageViews[i]);
 			RWD_ASSERT(result == VK_SUCCESS, "Failed to create an image view");
 		}
 	}
@@ -491,7 +548,7 @@ namespace rwd {
 			createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
 			VkShaderModule shaderModule;
-			if (vkCreateShaderModule(mVulkanDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+			if (vkCreateShaderModule(sVulkanDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create shader module!");
 			}
 
@@ -524,12 +581,14 @@ namespace rwd {
 		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
 		// Describe the format of the data being passed into the vertex shader
+		auto bindingDescription = Vertex::getBindingDescription();
+		auto attributeDescriptions = Vertex::getAttributeDescriptions();
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo { 
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			.vertexBindingDescriptionCount = 0,
-			.pVertexBindingDescriptions = nullptr,
-			.vertexAttributeDescriptionCount = 0,
-			.pVertexAttributeDescriptions = nullptr,
+			.vertexBindingDescriptionCount = 1,
+			.pVertexBindingDescriptions = &bindingDescription,
+			.vertexAttributeDescriptionCount = (uint32_t)attributeDescriptions.size(),
+			.pVertexAttributeDescriptions = attributeDescriptions.data(),
 		};
 
 		// Define how we want the vertex data to be drawn (lines, triangles, etc.)
@@ -650,7 +709,7 @@ namespace rwd {
 			.pPushConstantRanges = nullptr, // Optional
 		};
 
-		VkResult result = vkCreatePipelineLayout(mVulkanDevice, &pipelineLayoutInfo, nullptr, &mPipelineLayout);
+		VkResult result = vkCreatePipelineLayout(sVulkanDevice, &pipelineLayoutInfo, nullptr, &mPipelineLayout);
 
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan pipeline layout");
 
@@ -679,12 +738,12 @@ namespace rwd {
 			.subpass = 0,
 		};
 
-		result = vkCreateGraphicsPipelines(mVulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mGraphicsPipeline);
+		result = vkCreateGraphicsPipelines(sVulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &mGraphicsPipeline);
 
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan graphics pipeline");
 
-		vkDestroyShaderModule(mVulkanDevice, fragShaderModule, nullptr);
-		vkDestroyShaderModule(mVulkanDevice, vertShaderModule, nullptr);
+		vkDestroyShaderModule(sVulkanDevice, fragShaderModule, nullptr);
+		vkDestroyShaderModule(sVulkanDevice, vertShaderModule, nullptr);
 	}
 
 	void VulkanContext::CreateFrameBuffers() {
@@ -705,14 +764,14 @@ namespace rwd {
 				.layers = 1,
 			};
 
-			VkResult result = vkCreateFramebuffer(mVulkanDevice, &framebufferInfo, nullptr, &mSwapChainFramebuffers[i]);
+			VkResult result = vkCreateFramebuffer(sVulkanDevice, &framebufferInfo, nullptr, &mSwapChainFramebuffers[i]);
 
 			RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan framebuffer");
 		}
 	}
 
 	void VulkanContext::CreateCommandPool() {
-		QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(mPhysicalDevice);
+		QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(sPhysicalDevice);
 
 		// Each command pool can only allocate command buffers that 
 		// are submitted on a single type of queue.
@@ -723,7 +782,7 @@ namespace rwd {
 			.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value(),
 		};
 
-		VkResult result = vkCreateCommandPool(mVulkanDevice, &poolInfo, nullptr, &mCommandPool);
+		VkResult result = vkCreateCommandPool(sVulkanDevice, &poolInfo, nullptr, &mCommandPool);
 
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan command pool");
 	}
@@ -738,7 +797,7 @@ namespace rwd {
 			.commandBufferCount = (uint32_t)mCommandBuffers.size(),
 		};
 
-		VkResult result = vkAllocateCommandBuffers(mVulkanDevice, &allocInfo, mCommandBuffers.data());
+		VkResult result = vkAllocateCommandBuffers(sVulkanDevice, &allocInfo, mCommandBuffers.data());
 
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan command buffers");
 	}
@@ -759,9 +818,9 @@ namespace rwd {
 		};
 
 		for (u32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			vkCreateSemaphore(mVulkanDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]);
-			vkCreateSemaphore(mVulkanDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]);
-			vkCreateFence(mVulkanDevice, &fenceInfo, nullptr, &mInFlightFences[i]);
+			vkCreateSemaphore(sVulkanDevice, &semaphoreInfo, nullptr, &mImageAvailableSemaphores[i]);
+			vkCreateSemaphore(sVulkanDevice, &semaphoreInfo, nullptr, &mRenderFinishedSemaphores[i]);
+			vkCreateFence(sVulkanDevice, &fenceInfo, nullptr, &mInFlightFences[i]);
 		}
 	}
 
@@ -791,6 +850,12 @@ namespace rwd {
 		vkCmdBeginRenderPass(cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mGraphicsPipeline);
 
+		static VulkanVertexBuffer vertexBuffer((void*)vertices.data(), sizeof(Vertex) * vertices.size());
+
+		VkBuffer vertexBuffers[] = { vertexBuffer.mBuffer };
+		VkDeviceSize offsets[] = { 0 };
+		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
+
 		// Set the dynamic states that were specified in the pipeline
 		{
 			VkViewport viewport {
@@ -817,9 +882,44 @@ namespace rwd {
 		vkEndCommandBuffer(cmdBuffer);
 	}
 
+	void VulkanContext::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+		VkCommandBufferAllocateInfo allocInfo { };
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandPool = mCommandPool;
+		allocInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(sVulkanDevice, &allocInfo, &commandBuffer);
+
+		VkCommandBufferBeginInfo beginInfo { };
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+		VkBufferCopy copyRegion { };
+		copyRegion.srcOffset = 0; // Optional
+		copyRegion.dstOffset = 0; // Optional
+		copyRegion.size = size;
+		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+		vkEndCommandBuffer(commandBuffer);
+
+		VkSubmitInfo submitInfo { };
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+
+		vkQueueSubmit(mGraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+		vkQueueWaitIdle(mGraphicsQueue);
+
+		vkFreeCommandBuffers(sVulkanDevice, mCommandPool, 1, &commandBuffer);
+	}
+
 	void VulkanContext::RecreateSwapChain() {
 		// Wait for operations on the GPU to finish
-		vkDeviceWaitIdle(mVulkanDevice);
+		vkDeviceWaitIdle(sVulkanDevice);
 
 		DestroySwapChain();
 
@@ -830,14 +930,14 @@ namespace rwd {
 
 	void VulkanContext::DestroySwapChain() {
 		for (const auto& framebuffer : mSwapChainFramebuffers) {
-			vkDestroyFramebuffer(mVulkanDevice, framebuffer, nullptr);
+			vkDestroyFramebuffer(sVulkanDevice, framebuffer, nullptr);
 		}
 
 		for (const auto& imageView : mSwapChainImageViews) {
-			vkDestroyImageView(mVulkanDevice, imageView, nullptr);
+			vkDestroyImageView(sVulkanDevice, imageView, nullptr);
 		}
 
-		vkDestroySwapchainKHR(mVulkanDevice, mSwapChain, nullptr);
+		vkDestroySwapchainKHR(sVulkanDevice, mSwapChain, nullptr);
 	}
 
 	void VulkanContext::CreateRenderPass() {
@@ -912,7 +1012,7 @@ namespace rwd {
 			.pDependencies = &dependency,
 		};
 
-		VkResult result = vkCreateRenderPass(mVulkanDevice, &renderPassInfo, nullptr, &mRenderPass);
+		VkResult result = vkCreateRenderPass(sVulkanDevice, &renderPassInfo, nullptr, &mRenderPass);
 
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan render pass");
 	}
