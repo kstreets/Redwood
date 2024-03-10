@@ -37,9 +37,14 @@ namespace rwd {
 	};
 
 	const std::vector<Vertex> vertices = {
-		{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+	};
+
+	const std::vector<uint16_t> indices = {
+		0, 1, 2, 2, 3, 0
 	};
 
 	const u32 MAX_FRAMES_IN_FLIGHT = 2;
@@ -868,9 +873,12 @@ namespace rwd {
 
 		static VulkanVertexBuffer vertexBuffer((void*)vertices.data(), sizeof(Vertex) * vertices.size());
 
-		VkBuffer vertexBuffers[] = { vertexBuffer.mBuffer };
+		VkBuffer vertexBuffers[] = { vertexBuffer };
 		VkDeviceSize offsets[] = { 0 };
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
+
+		static VulkanIndexBuffer indexBuffer((void*)indices.data(), sizeof(uint16_t) * indices.size());
+		vkCmdBindIndexBuffer(cmdBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
 		// Set the dynamic states that were specified in the pipeline
 		{
@@ -892,7 +900,7 @@ namespace rwd {
 			vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
 		}
 
-		vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
+		vkCmdDrawIndexed(cmdBuffer, (uint32_t)indices.size(), 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(cmdBuffer);
 		vkEndCommandBuffer(cmdBuffer);

@@ -7,10 +7,10 @@ namespace rwd {
 
 	class VulkanVertexBuffer : public VertexBuffer {
 	public:
-		friend class VulkanContext;
-
 		VulkanVertexBuffer(void* verts, u32 size);
 		~VulkanVertexBuffer();
+
+		operator VkBuffer() const { return mBuffer; };
 
 		void Bind() const override;
 		void BufferData(const u8* bytes) override;
@@ -21,13 +21,16 @@ namespace rwd {
 
 	class VulkanIndexBuffer : public IndexBuffer {
 	public:
-		VulkanIndexBuffer(i32* indices, u32 size);
+		VulkanIndexBuffer(void* indices, u32 size);
 		~VulkanIndexBuffer();
+
+		operator VkBuffer() const { return mBuffer; };
 
 		void Bind() const override;
 		void BufferData(const u8* bytes) override;
 	private:
-		u32 mId;
+		VkBuffer mBuffer;
+		VmaAllocation mBufferMemory;
 	};
 
 	class VulkanVertexArray {

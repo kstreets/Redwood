@@ -70,10 +70,36 @@ namespace rwd {
 	//
 	//-------------------------------------------------------------------------
 
-	VulkanIndexBuffer::VulkanIndexBuffer(i32* indices, u32 size) {
+	VulkanIndexBuffer::VulkanIndexBuffer(void* indices, u32 size) {
+		VkDevice device = VulkanContext::VulkanDevice();
+		VmaAllocator allocator = VulkanContext::CustomAllocator();
+
+		VkBuffer stagingBuffer;
+		VmaAllocation stagingBufferMemory;
+
+		VkBufferUsageFlags stagingUsage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+		CreateBuffer(size, stagingUsage, VMA_MEMORY_USAGE_CPU_TO_GPU, stagingBuffer, stagingBufferMemory);
+
+		void* data;
+		vmaMapMemory(allocator, stagingBufferMemory, &data);
+		memcpy(data, indices, size);
+		vmaUnmapMemory(allocator, stagingBufferMemory);
+
+		VkBufferUsageFlags indexUsage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+		CreateBuffer(size, indexUsage, VMA_MEMORY_USAGE_GPU_ONLY, mBuffer, mBufferMemory);
+
+		VulkanContext::CopyBuffer(stagingBuffer, mBuffer, size);
+
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		vmaFreeMemory(allocator, stagingBufferMemory);
 	}
 
 	VulkanIndexBuffer::~VulkanIndexBuffer() {
+		VkDevice device = VulkanContext::VulkanDevice();
+		VmaAllocator allocator = VulkanContext::CustomAllocator();
+
+		vmaFreeMemory(allocator, mBufferMemory);
+		vkDestroyBuffer(device, mBuffer, nullptr);
 	}
 
 	void VulkanIndexBuffer::Bind() const {
