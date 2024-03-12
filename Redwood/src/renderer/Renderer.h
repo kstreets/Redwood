@@ -7,7 +7,7 @@ namespace rwd {
 
 	class Renderer {
 	public:
-		virtual void DrawMesh(Mesh& mesh, Shader& shader) const = 0;
+		virtual void DrawMesh(Mesh& mesh, Shader& shader) = 0;
 		virtual void SetClearColor() = 0;
 		virtual void Clear() = 0;
 	};

@@ -5,16 +5,17 @@
 
 namespace rwd {
 
-	Mesh::Mesh(f32* verts, u32 vertSize, i32* indices, u32 indiceSize, i32 indexCount) {
-		mGLVertexArray = MakeRef<GLVertexArray>();
+	Mesh::Mesh(std::vector<f32> verts, std::vector<u32> indices) {
+		mVerts = verts;
+		mIndices = indices;
+	}
 
-		Ref<GLVertexBuffer> vertexBuffer = MakeRef<GLVertexBuffer>(verts, vertSize);
-		Ref<GLIndexBuffer> indexBuffer = MakeRef<GLIndexBuffer>(indices, indiceSize);
+	size_t Mesh::VertexBufferSize() const {
+		return sizeof(mVerts[0]) * mVerts.size();
+	}
 
-		mGLVertexArray->SetVertexBuffer(vertexBuffer);
-		mGLVertexArray->SetIndexBuffer(indexBuffer);
-
-		mIndexCount = indexCount;
+	size_t Mesh::IndexBufferSize() const {
+		return sizeof(mIndices[0]) * mIndices.size();
 	}
 
 }

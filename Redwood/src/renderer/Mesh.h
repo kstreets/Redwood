@@ -1,17 +1,19 @@
 #pragma once
+#include "pch.h"
 #include "core/Core.h"
-#include "Buffer.h"
 
 namespace rwd {
 
-	class GLVertexArray;
-
 	class Mesh {
 	public:
-		Mesh(f32* verts, u32 vertSize, i32* indices, u32 indiceSize, i32 indexCount);
+		Mesh(std::vector<f32> verts, std::vector<u32> indices);
+
+		size_t VertexBufferSize() const;
+		size_t IndexBufferSize() const;
+
 	public:
-		Ref<GLVertexArray> mGLVertexArray;
-		i32 mIndexCount;
+		std::vector<f32> mVerts;
+		std::vector<u32> mIndices;
 	};
 
 }

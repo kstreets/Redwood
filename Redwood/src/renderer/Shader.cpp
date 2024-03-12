@@ -5,21 +5,31 @@
 namespace rwd {
 
 	Shader::Shader(const std::string& vertFile, const std::string& fragFile) {
+		static u32 curShaderId = 0;
+		mShaderId = curShaderId++;
 		CreateShader(vertFile, fragFile);
 	}
 
+	bool Shader::operator==(const Shader& other) const {
+		return mShaderId == other.mShaderId;
+	}
+
+	u32 Shader::Id() const {
+		return mShaderId;
+	}
+
 	void Shader::Bind() const {
-		glUseProgram(shaderId);
+		glUseProgram(mGLShaderId);
 	}
 
 	inline int Shader::GetUniformLocation(const std::string& name) {
-		if (!m_UniformLocations.contains(name)) {
-			i32 location = glGetUniformLocation(shaderId, name.c_str());
-			m_UniformLocations[name] = location;
+		if (!mUniformLocations.contains(name)) {
+			i32 location = glGetUniformLocation(mGLShaderId, name.c_str());
+			mUniformLocations[name] = location;
 			return location;
 		}
 
-		return m_UniformLocations[name];
+		return mUniformLocations[name];
 	}
 
 	void Shader::CreateShader(const std::string& vertFile, const std::string& fragFile) {
@@ -48,13 +58,13 @@ namespace rwd {
 #endif
 
 		// Shader Program
-		shaderId = glCreateProgram();
-		glAttachShader(shaderId, vertex);
-		glAttachShader(shaderId, fragment);
-		glLinkProgram(shaderId);
+		mGLShaderId = glCreateProgram();
+		glAttachShader(mGLShaderId, vertex);
+		glAttachShader(mGLShaderId, fragment);
+		glLinkProgram(mGLShaderId);
 
 #if _DEBUG
-		CheckCompileErrors(shaderId, "Shader Linking");
+		CheckCompileErrors(mGLShaderId, "Shader Linking");
 #endif
 
 		// Delete the shaders as they're linked into our program and are no longer necessary

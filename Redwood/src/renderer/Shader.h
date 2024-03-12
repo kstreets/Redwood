@@ -9,6 +9,10 @@ namespace rwd {
 	public:
 		Shader() = default;
 		Shader(const std::string& vertFile, const std::string& fragFile);
+
+		bool operator==(const Shader& other) const;
+
+		u32 Id() const;
 		void Bind() const;
 	private:
 		inline i32 GetUniformLocation(const std::string& name);
@@ -16,8 +20,9 @@ namespace rwd {
 		std::string LoadShaderFile(const std::string& filePath) const;
 		void CheckCompileErrors(u32 shader, const std::string& type) const;
 
-		i32 shaderId;
-		std::unordered_map<std::string, i32> m_UniformLocations;
+		i32 mGLShaderId;
+		u32 mShaderId;
+		std::unordered_map<std::string, i32> mUniformLocations;
 	};
 
 }

@@ -53,7 +53,6 @@ namespace rwd {
 			}
 		}
 
-		((VulkanContext*)mContext.get())->DrawFrame();
 		mContext->SwapBuffers();
 	}
 

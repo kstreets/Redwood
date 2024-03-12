@@ -4,13 +4,14 @@
 #include "Window.h"
 #include "Events.h"
 #include "renderer/OpenGL/OpenGLRenderer.h"
+#include "renderer/Vulkan/VulkanRenderer.h"
 #include "renderer/Mesh.h"
 #include "renderer/Shader.h"
-#include "vulkan/vulkan.h"
 #include "App.h"
 
 namespace rwd {
 
+	VulkanRenderer* renderer;
 	Mesh* triangleMesh;
 	Shader shader;
 
@@ -22,6 +23,9 @@ namespace rwd {
 
 		mWindow = Window::Create();
 		windowCloseEventHandler.Subscribe(BIND_EVENT_FN(App::OnWindowClose));
+
+		renderer = new VulkanRenderer;
+		renderer->Init(MakeRef<VulkanContext>(*(VulkanContext*)mWindow->mContext.get()));
 
 		f32 verts[] {
 			-0.5, -0.5, 0.0,
@@ -50,8 +54,9 @@ namespace rwd {
 	}
 
 	void App::MainUpdateLoop() {
-		static OpenGLRenderer renderer;
+		//static OpenGLRenderer renderer;
 
+		renderer->DrawFrame();
 		//renderer.Clear();
 		//renderer.DrawMesh(*triangleMesh, shader);
 		mWindow->Update();

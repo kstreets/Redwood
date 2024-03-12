@@ -7,43 +7,72 @@ namespace rwd {
 
 	class VulkanVertexBuffer : public VertexBuffer {
 	public:
-		VulkanVertexBuffer(void* verts, u32 size);
-		~VulkanVertexBuffer();
+		VulkanVertexBuffer() = default;
+		VulkanVertexBuffer(void* verts, u32 size, VkDevice device, VmaAllocator allocator);
 
-		operator VkBuffer() const { return mBuffer; };
+		void FreeBuffer(VkDevice device, VmaAllocator allocator);
+		void FreeStagingBuffer(VkDevice device, VmaAllocator allocator);
 
 		void Bind() const override;
 		void BufferData(const u8* bytes) override;
+
+		size_t Size() const;
+		VkBuffer Buffer() const;
+		VkBuffer StagingBuffer() const;
 	private:
+		VkBuffer mStagingBuffer;
+		VmaAllocation mStagingBufferMemory;
+
 		VkBuffer mBuffer;
 		VmaAllocation mBufferMemory;
+
+		size_t mSize;
 	};
 
 	class VulkanIndexBuffer : public IndexBuffer {
 	public:
-		VulkanIndexBuffer(void* indices, u32 size);
-		~VulkanIndexBuffer();
+		VulkanIndexBuffer() = default;
+		VulkanIndexBuffer(void* indices, u32 size, VkDevice device, VmaAllocator allocator);
 
-		operator VkBuffer() const { return mBuffer; };
+		void FreeBuffer(VkDevice device, VmaAllocator allocator);
+		void FreeStagingBuffer(VkDevice device, VmaAllocator allocator);
 
 		void Bind() const override;
 		void BufferData(const u8* bytes) override;
+
+		size_t Size() const;
+		VkBuffer Buffer() const;
+		VkBuffer StagingBuffer() const;
 	private:
+		VkBuffer mStagingBuffer;
+		VmaAllocation mStagingBufferMemory;
+
 		VkBuffer mBuffer;
 		VmaAllocation mBufferMemory;
+
+		size_t mSize;
 	};
 
-	class VulkanVertexArray {
+	class VulkanMesh {
 	public:
-		VulkanVertexArray();
-		~VulkanVertexArray();
+		VulkanMesh();
+		~VulkanMesh();
 		void Bind() const;
-		void SetVertexBuffer(Ref<VulkanVertexBuffer> vertexBuffer);
-		void SetIndexBuffer(Ref<VulkanIndexBuffer> indexBuffer);
+
+		void SetVertexBuffer(VulkanVertexBuffer vertexBuffer);
+		void SetIndexBuffer(VulkanIndexBuffer indexBuffer);
+
+		size_t VertexBufferSize() const;
+		size_t IndexBufferSize() const;
+
+		VkBuffer VertexBuffer() const;
+		VkBuffer VertexStagingBuffer() const;
+
+		VkBuffer IndexBuffer() const;
+		VkBuffer IndexStagingBuffer() const;
 	private:
-		Ref<VulkanVertexBuffer> mVertexBuffer;
-		Ref<VulkanIndexBuffer> mIndexBuffer;
-		u32 mVao;
+		VulkanVertexBuffer mVertexBuffer;
+		VulkanIndexBuffer mIndexBuffer;
 	};
 
 }
