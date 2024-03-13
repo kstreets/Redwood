@@ -1,7 +1,8 @@
 #include "pch.h"
 #include "core/Log.h"
 #include "core/Math.h"
-#include "renderer/Shader.h"
+#include "core/System.h"
+#include "VulkanShader.h"
 #include "VulkanBuffer.h"
 #include "VulkanRenderer.h"
 
@@ -67,7 +68,9 @@ namespace rwd {
 		CreateSwapChain();
 		CreateSwapChainImageViews();
 		CreateRenderPass();
-		mPipelines.push_back(CreatePipelineForShader(Shader()));
+
+		VulkanShader temp("../Redwood/src/vert.spv", "../Redwood/src/frag.spv");
+		mPipelines.push_back(CreatePipelineForShader(temp));
 		CreateFrameBuffers();
 		CreateCommandPool();
 		CreateCommandBuffers();
@@ -186,52 +189,16 @@ namespace rwd {
 		mCurFrame = (mCurFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
-	// Temporary helper function for loading SPIR-V
-	static std::vector<char> readFile(const std::string& filename) {
-		std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-		if (!file.is_open()) {
-			throw std::runtime_error("failed to open file!");
-		}
-
-		size_t fileSize = (size_t)file.tellg();
-		std::vector<char> buffer(fileSize);
-
-		file.seekg(0);
-		file.read(buffer.data(), fileSize);
-
-		file.close();
-
-		return buffer;
-	}
-
-	VkPipeline VulkanRenderer::CreatePipelineForShader(const Shader& shader) {
-		auto vertShaderCode = readFile("../Redwood/src/vert.spv");
-		auto fragShaderCode = readFile("../Redwood/src/frag.spv");
-
-		auto CreateShaderModule = [this] (std::vector<char> code) {
-			VkShaderModuleCreateInfo createInfo { };
-			createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-			createInfo.codeSize = code.size();
-			createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-			VkShaderModule shaderModule;
-			if (vkCreateShaderModule(mContext->mDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create shader module!");
-			}
-
-			return shaderModule;
-		};
-
-		VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
-		VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+	VkPipeline VulkanRenderer::CreatePipelineForShader(Shader& shader) {
+		VulkanShader* vulkanShader = reinterpret_cast<VulkanShader*>(&shader);
+		vulkanShader->CreateShaderModules(mContext->mDevice);
 
 		// Specify pipeline stage for vertex shader
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo { 
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_VERTEX_BIT,
 			// Set which shader module this stage is going to use
-			.module = vertShaderModule,
+			.module = vulkanShader->VertexModule(),
 			// Specify the shader's entry point by name
 			.pName = "main",
 		};
@@ -241,7 +208,7 @@ namespace rwd {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
 			// Set which shader module this stage is going to use
-			.module = fragShaderModule,
+			.module = vulkanShader->FragmentModule(),
 			// Specify the shader's entry point by name
 			.pName = "main",
 		};
@@ -411,8 +378,7 @@ namespace rwd {
 
 		RWD_ASSERT(result == VK_SUCCESS, "Failed to create Vulkan graphics pipeline");
 
-		vkDestroyShaderModule(mContext->mDevice, fragShaderModule, nullptr);
-		vkDestroyShaderModule(mContext->mDevice, vertShaderModule, nullptr);
+		vulkanShader->FreeShaderModules(mContext->mDevice);
 
 		return newPipeline;
 	}

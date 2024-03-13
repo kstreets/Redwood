@@ -29,7 +29,7 @@ namespace rwd {
 		void CreateRenderPass();
 		void CreateSyncObjects();
 
-		VkPipeline CreatePipelineForShader(const Shader& shader);
+		VkPipeline CreatePipelineForShader(Shader& shader);
 		void RecordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex);
 
 		void RecreateSwapChain();

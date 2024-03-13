@@ -2,9 +2,10 @@
 #include "Core.h"
 
 struct SDL_Window;
-class Context;
 
 namespace rwd {
+
+	class Context;
 
 	class RWD_API Window {
 	public:

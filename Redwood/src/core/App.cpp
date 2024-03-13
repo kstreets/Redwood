@@ -25,7 +25,7 @@ namespace rwd {
 		windowCloseEventHandler.Subscribe(BIND_EVENT_FN(App::OnWindowClose));
 
 		renderer = new VulkanRenderer;
-		renderer->Init(MakeRef<VulkanContext>(*(VulkanContext*)mWindow->mContext.get()));
+		renderer->Init(std::dynamic_pointer_cast<VulkanContext>(mWindow->mContext));
 
 		f32 verts[] {
 			-0.5, -0.5, 0.0,
